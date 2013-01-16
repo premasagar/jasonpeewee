@@ -105,31 +105,28 @@
         // Create global master callback, which receives data from the remote API
         // and passes that data on to the private callbacks
         masterCallbacks[callbackName] = function(data){
-            var callbacksLength = callbacks.length,
-                // Are further requests pending?
-                hasPendingRequests = callbacksLength > 1,
-                i;
+            var len = callbacks.length;
 
             // Call all callbacks with the data
-            for (i=0; i<callbacksLength; i++){
-                // Remove the first callback in the array, and call it
+            // We use a `for` loop, not a `while` loop, in case the callbacks
+            // create new callbacks
+            for (; len; len--){
+                // Remove the first callback in the array, and pass data to it
                 callbacks.shift()(data);
             }
 
-            // Free up memory by deleting the container for the request
-            // We check there are no further requests pending and that no callbacks
-            // were created since the start of the `for` loop
-            if (!hasPendingRequests){
-                removeCallbackCollection(callbackName);
-            }
+            // Free up memory by deleting container
+            removeCallbackCollectionIfEmpty(callbackName);
         };
         
         return callbacks;
     }
 
-    function removeCallbackCollection(callbackName){
+    function removeCallbackCollectionIfEmpty(callbackName){
+        var callbacks = privateCallbacks[callbackName];
+
         // Only remove if there are no private callbacks remaining
-        if (!privateCallbacks[callbackName].length){
+        if (callbacks && !callbacks.length){
             delete privateCallbacks[callbackName];
             delete masterCallbacks[callbackName];
         }
@@ -143,74 +140,61 @@
         return callback;
     }
 
-    function generateErrorObject(url){
-        return {
-            generator: 'jasonpeewee',
-            error: 'JSONP failed',
-            url: url
-        };
+    function shiftCallback(callbackName){
+        var callbacks = privateCallbacks[callbackName];
+        return callbacks && callbacks.shift();
     }
 
-    function generateErrorHandler(callbackName, url){
-        return function(success){
-            var callbacks, callback;
+    /*
+        NOTE: older IE's don't support `onerror` events when <script> elements fail to load; hence the callback may never fire with the error object, and the callback may not be removed from the container.
+    */
+    function generateErrorHandler(callbackName, errorCallback){
+        return function(url){
+            // Remove the callback that led to the failed request
+            shiftCallback(callbackName);
 
-            // JSONP request failed
-            if (!success){
-                // Remove the callback that led to the failed request
-                callbacks = privateCallbacks[callbackName];
+            // Free up memory by deleting container
+            removeCallbackCollectionIfEmpty(callbackName);
 
-                if (callbacks){
-                    callback = callbacks.shift();
-
-                    if (callback){
-                        // Call the callback with an error object
-                        callback(generateErrorObject(url));
-                    }
-
-                    // Free up memory by deleting container
-                    removeCallbackCollection(callbackName);
-                }
+            if (errorCallback){
+                // Call the error callback with an error object
+                errorCallback({
+                    error: 'JSONP failed',
+                    url: url
+                });
             }
-
-            /*
-                NOTE: older IE's don't support `onerror` events when <script> elements fail to load; hence the callback may never fire with the error object, and the callback may not be removed from the container.
-            */
         };
     }
 
     // Load a script into a <script> element
     // Modified from https://github.com/premasagar/cmd.js/tree/master/lib/getscript.js
-    function getscript(src, callback, settings){
+    function getscript(url, settings){
         var head = document.head || document.getElementsByTagName('head')[0],
             script = document.createElement('script'),
-            loaded = false;
+            active = true;
             
-        function finish(){
-            // Clean up circular references to prevent memory leaks in IE
-            script.onload = script.onreadystatechange = script.onerror = null;
+        function cleanup(){
+            // Remove circular references to prevent memory leaks in IE
+            active = script.onload = script.onreadystatechange = script.onerror = null;
             
-            // Remove script element once loaded
-            head.removeChild(script); 
-
-            if (callback){
-                callback.call(window, loaded);
-            }
+            // Remove script element
+            head.removeChild(script);
         }
 
         script.type = 'text/javascript';
-        script.charset = settings && settings.charset || 'utf-8';
-        script.src = src;
+        script.charset = settings.charset || 'utf-8';
+        script.src = url;
         script.onload = script.onreadystatechange = function(){
             var state = this.readyState;
-            
-            if (!loaded && (!state || state === 'complete' || state === 'loaded')){
-                loaded = true;
-                finish();
+            if (active && (!state || state === 'complete' || state === 'loaded')){
+                cleanup();
             }
         };
         // NOTE: IE8 and below don't fire error events
-        script.onerror = finish;
+        script.onerror = function(){
+            cleanup();
+            settings.error(url);
+        };
 
         head.appendChild(script);
     }
@@ -227,20 +211,37 @@
             - charset: (most likely you'll never need this) the value `charset` attribute to be added to the script that loads the JSONP. The remote API server should set the correct charset in its headers. Where it does not, the default value of `utf-8` is used. Where UTF-8 is not the desired charset, you can provide your own here.
     */
     function jasonpeewee(url, params, callback, settings){
-        var callbackParameter, callbackName, errorHandler;
+        var callbackParameter = 'callback',
+            scriptSettings = {},
+            errorCallback, callbackName;
 
         // If `params` has not been passed
         if (typeof params === 'function'){
+            settings = callback;
             callback = params;
             params = null;
         }
 
-        // Determine which parameter the remote API requires for the callback name
-        // Usually, this is `callback` and sometimes `jsonpcallback`
-        // e.g. http://example.com?callback=foo
-        callbackParameter = settings && settings.callbackParameter || 'callback';
+        if (settings){
+            // Override the default parameter the remote API requires for the
+            // callback name. Usually, this is `callback` and sometimes
+            // `jsonpcallback`, e.g. http://example.com?callback=foo
+            if (settings.callbackParameter){
+                callbackParameter = settings.callbackParameter;
+            }
 
-        // Check if url already contains a query string
+            // Error handler - called if the script fails to load
+            if (settings.error){
+                errorCallback = settings.error;
+            }
+
+            // Set charset for script loading
+            if (settings.charset){
+                scriptSettings.charset = settings.charset;
+            }
+        }
+
+        // Check if URL already contains a query string
         url += url.indexOf('?') === -1 ? '?' : '&';
 
         // Generate query string from settings
@@ -258,9 +259,11 @@
 
         registerCallback(callbackName, callback);
 
-        // Call getscript() and pass in a handler to determine if call failed
-        errorHandler = generateErrorHandler(callbackName, url);
-        getscript(url, errorHandler, settings);
+        // Error handler to cleanup objects in memory, and call callback if set
+        scriptSettings.error = generateErrorHandler(callbackName, errorCallback);
+
+        // Load the script
+        getscript(url, scriptSettings);
 
         return url;
     }

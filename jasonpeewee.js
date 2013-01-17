@@ -92,21 +92,13 @@
         // Create global master callback, which receives data from the remote API
         // and passes that data on to the private callbacks
         masterCallbacks[callbackName] = function(data){
-            var len = callbacks.length,
-                i = 0;
-
-            // Call all callbacks with the data
-            for (; i<len; i++){
-                callbacks[i](data);
+            // Remove each callback and pass it the data
+            while (callbacks.length){
+                callbacks.shift()(data);
             }
         };
         
         return callbacks;
-    }
-
-    function removeCollection(callbackName){
-        delete privateCallbacks[callbackName];
-        delete masterCallbacks[callbackName];
     }
 
     // Register a private callback, called when a JSONP response calls a global, master callback
@@ -120,17 +112,34 @@
     /*
         NOTE: older IE's don't support `onerror` events when <script> elements fail to load; hence the callback may never fire with the error object, and the callback may not be removed from the container.
     */
+    // TODO: should master callback use shift to remove callbacks, and any remaining should be passed error responses? that removes specific error callbacks. or, if there are any callbacks in the collection, then call the error callback
+    // failing scenario: two calls to same url; first call fails (e.g. server offline) and callbacks deleted, then second call succeeds, but callback already deleted, so won't be called, and errorCallback of second won't be called. At least, this'll only happen if the second call is made in after the first call is made and before the first call returns.
     function generateScriptCallback(callbackName, errorCallback){
         return function(success, url){
-            // Free up memory by deleting container
-            removeCollection(callbackName);
+            var callbacks = privateCallbacks[callbackName],
+                callbackRemaining;
 
-            if (!success && errorCallback){
-                // Call the error callback with an error object
-                errorCallback({
-                    error: 'JSONP failed',
-                    url: url
-                });
+            if (callbacks){
+                // Remove the successCallback, if it exists
+                // In the case of a loaded, successful response, there will be no
+                // remaining callbacks
+                callbackRemaining = callbacks.shift();
+
+                // Free up memory by deleting callbacks collection if empty
+                if (!callbacks.length){
+                    delete privateCallbacks[callbackName];
+                    delete masterCallbacks[callbackName];
+                }
+            }
+
+            // If the response loaded, but there is a callback still remaining,
+            // then most likely the response was not valid JSONP.
+            // If the response failed to load, and there is no callback remaining,
+            // then there's no need to call the errorCallback; as it looks like the
+            // success callback was already called, e.g. as part of a previously
+            // successful response.
+            if (errorCallback && callbackRemaining){
+                errorCallback(url);
             }
         };
     }

@@ -16,7 +16,8 @@
     
     <body>
         <h1>Jason Peewee - a cache-friendly JSONP super-assistant</h1>
-        <p>No script dependencies. ~ 800 bytes gzipped.</p>
+        <p>No script dependencies. ~ 800 bytes gzipped.<br>
+            View the source of this demo page to see the code snippets used.</p>
 
         <h2>Example 1: GitHub bio</h2>
         <p>Load <a href="https://github.com/premasagar">Prem</a>'s bio <a href="https://api.github.com/users/premasagar">from the GitHub API</a> (and if you refresh the page, the data should already be cached for you):</p>
@@ -26,9 +27,19 @@
         <p>Load <a href="www.delicious.com/premasagar">Prem</a>'s latest bookmarks <a href="http://feeds.delicious.com/v2/json/premasagar/?count=1">from the Delicious API</a>:</p>
         <ul class="results" id="delicious-results"></ul>
 
+        <h2>Example 3: Error callback for load fail:</h2>
+        <p>Attempt to load <a href="randomURLthatDoesntExist.js">a resource</a> that fails to load (e.g. server offline)</p>
+        <div class="results" id="failload-results"></div>
+
+        <h2>Example 4: Error callback for non-JSONP</h2>
+        <p>Load <a href="index.html">a resource</a> that exists but isn't valid JSONP:</p>
+        <div class="results" id="notjsonp-results"></div>
+
         <script src="jasonpeewee.js"></script>
         <script>
-            // GitHub example
+            // CODE SNIPPETS FOR THE EXAMPLES
+
+            // GitHub
             jasonpeewee(
                 'https://api.github.com/users/premasagar',
                 function(data){
@@ -39,7 +50,7 @@
                 }
             );
 
-            // Delicious example
+            // Delicious
             jasonpeewee(
                 'http://feeds.delicious.com/v2/json/premasagar/',
                 {count: 10},
@@ -52,6 +63,30 @@
                         html += '<li><a href="' + bookmark.u + '">' + bookmark.d + '</a></li>';
                     }
                     elem.innerHTML = html;
+                }
+            );
+
+            // Non-loading error
+            jasonpeewee(
+                'randomURLthatDoesntExist.js', // this doesn't exist
+                function(){},                  // the success callback
+                {                              // settings object
+                    error: function(url){
+                        var elem = document.getElementById('failload-results');
+                        elem.innerHTML = 'Sorry, could not load the data. (This is an error callback)';
+                    }
+                }
+            );
+
+            // Non-JSONP error
+            jasonpeewee(
+                'index.html', // this does exist but isn't JSONP
+                function(){}, // the success callback
+                {             // settings object
+                    error: function(url){
+                        var elem = document.getElementById('notjsonp-results');
+                        elem.innerHTML = 'Sorry, could not load the data. (This is an error callback)';
+                    }
                 }
             );
         </script>

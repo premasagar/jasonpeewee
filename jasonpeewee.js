@@ -110,7 +110,7 @@
     }
 
     /*
-        NOTE: older IE's don't support `onerror` events when <script> elements fail to load; hence the callback may never fire with the error object, and the callback may not be removed from the container.
+        NOTE: older IE's don't support `onerror` events when <script> elements fail to load; Firefox (as of v12) doesn't fire error events for local file:/// scripts. Hence the callback may never fire with the error object, and the callback may not be removed from the container.
     */
     // TODO: should master callback use shift to remove callbacks, and any remaining should be passed error responses? that removes specific error callbacks. or, if there are any callbacks in the collection, then call the error callback
     // failing scenario: two calls to same url; first call fails (e.g. server offline) and callbacks deleted, then second call succeeds, but callback already deleted, so won't be called, and errorCallback of second won't be called. At least, this'll only happen if the second call is made in after the first call is made and before the first call returns.
@@ -170,7 +170,7 @@
                 cleanup(true);
             }
         };
-        // NOTE: IE8 and below don't fire error events
+        // NOTE: IE8 and below don't fire error events; Firefox (as of v12) doesn't fire error events for local file:/// scripts.
         script.onerror = cleanup;
         head.appendChild(script);
     }

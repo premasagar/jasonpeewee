@@ -28,7 +28,7 @@
         <ul class="results" id="delicious-results"></ul>
 
         <h2>Example 3: Error callback for load fail:</h2>
-        <p>Attempt to load <a href="randomURLthatDoesntExist.js">a resource</a> that fails to load (e.g. server offline)</p>
+        <p>Attempt to load <a href="http://nondomain-123456789.com/script.js">a resource</a> that fails to load (e.g. server offline, script not found)</p>
         <div class="results" id="failload-results"></div>
 
         <h2>Example 4: Error callback for non-JSONP</h2>
@@ -68,7 +68,7 @@
 
             // Non-loading error
             jasonpeewee(
-                'randomURLthatDoesntExist.js', // this doesn't exist
+                'http://nondomain-123456789.com/script.js', // this doesn't exist
                 function(){},                  // the success callback
                 {                              // settings object
                     error: function(url){

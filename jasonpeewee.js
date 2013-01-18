@@ -20,6 +20,7 @@
         document = window['document'],
         encodeURIComponent = window['encodeURIComponent'],
         objectKeys = window['Object']['keys'],
+        head = document.getElementsByTagName('head')[0],
 
         // globally exposed container for JSONP callbacks that receive data
         masterCallbacks = {},
@@ -147,32 +148,30 @@
     // Load a script into a <script> element
     // Modified from https://github.com/premasagar/cmd.js/tree/master/lib/getscript.js
     function getscript(url, callback, charset){
-        var head = document.head || document.getElementsByTagName('head')[0],
-            script = document.createElement('script'),
-            active = true;
+        var script = head.appendChild(document.createElement('script'));
             
         function cleanup(success){
-            // Remove circular references to prevent memory leaks in IE
-            active = script.onload = script.onreadystatechange = script.onerror = null;
-            
             // Remove script element
             head.removeChild(script);
+
+            // Remove circular references to prevent memory leaks in IE
+            script = script.onload = script.onreadystatechange = script.onerror = null;
 
             callback(success === true, url);
         }
 
-        script.type = 'text/javascript';
-        script.charset = charset || 'utf-8';
-        script.src = url;
         script.onload = script.onreadystatechange = function(){
             var state = this.readyState;
-            if (active && (!state || state === 'complete' || state === 'loaded')){
+            if (script && (!state || state === 'complete' || state === 'loaded')){
                 cleanup(true);
             }
         };
         // NOTE: IE8 and below don't fire error events; Firefox (as of v12) doesn't fire error events for local file:/// scripts.
         script.onerror = cleanup;
-        head.appendChild(script);
+
+        script.type = 'text/javascript';
+        script.charset = charset || 'utf-8';
+        script.src = url;
     }
 
     // Make a JSONP request and set up the response handlers

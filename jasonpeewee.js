@@ -13,7 +13,7 @@
     'use strict';
 
     var // settings
-        callbacksName = '_jasonpeeweeFn',
+        callbacksName = '_jason',
 
         // window properties
         define = window['define'],
@@ -28,16 +28,41 @@
         // private container for individual callbacks to be passed data
         privateCallbacks = {},
 
-        makeJSCompatibleName;
+        createUrlSignature;
 
     /////
 
-    // Convert any string so that can be used as the name for a JavaScript variable
-    makeJSCompatibleName = (function(){
-        var nonAlphaRegex = /[^\w\$]+/ig;
+    function sumCharCodes(str){
+        var sum = 0,
+            i = str.length;
 
-        return function(string){
-            return string ? string.replace(nonAlphaRegex, '_') : '_';
+        for (; i; i--){
+            sum += str.charCodeAt(i-1);
+        }
+        return sum;
+    }
+
+    // Convert any string so that can be used as the name for a JavaScript variable
+    createUrlSignature = (function(){
+        var trailingQuestionMark = /\?$/;
+
+        return function(url){
+            var sig = '',
+                components, domains, length, i;
+
+            // Strip trailing '?'
+            url = url.replace(trailingQuestionMark, '');
+
+            components = url.split('?');
+            domains = components[0].split('.');
+
+            for (i=0,length=domains.length; i<length; i++){
+                sig += '_' + sumCharCodes(domains[i]);
+            }
+            for (i=0,length=components.length; i<length; i++){
+                sig += '_' + sumCharCodes(components[i]);
+            }
+            return sig;
         };
     }());
 
@@ -218,7 +243,7 @@
         url += params ? encodeAndSortQueryString(params) + '&' : '';
 
         // Create callbackName from the URL (including params)
-        callbackName = makeJSCompatibleName(url);
+        callbackName = createUrlSignature(url);
 
         // Add jsonp callback parameter
         url += callbackParameter + '=' + jasonpeewee['path'] + '.' + callbackName;
@@ -244,7 +269,7 @@
         GLOBAL JSONP CALLBACKS
 
         The collection of callbacks must be globally accessible, to capture the response from remote APIs. E.g the response from:
-            http://example.com?callback=_jasonpeeweeFn.somecallback123
+            http://example.com?callback=_jason.somecallback123
 
         The collection can be moved somewhere else that is globally accessible. If this is done, then the `jasonpeewee.path` property must be updated to the new location. E.g. jasonpeewee.path = 'myApp.callbacks';
     */
